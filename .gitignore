@@ -1,0 +1,22 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.python-version
+.claude/
+
+# Virtual environments
+.venv
+
+# uv stuff
+uv.lock
+
+
+# wakatime
+.wakatime-project
+
+# Environment variables
+.env

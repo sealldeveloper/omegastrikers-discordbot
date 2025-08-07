@@ -1,0 +1,10 @@
+[project]
+name = "omegastrikers-gamblerscup-discordbot"
+version = "0.1.0"
+description = "Omega Strikers Gamblers Cup Discord Bot for striker selection"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "discord.py>=2.3.0",
+    "python-dotenv>=1.0.0",
+]
