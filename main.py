@@ -32,6 +32,19 @@ CHARACTERS = {
     "Zentaro": "https://omegastrikers.wiki.gg/images/8/81/Zentaro_splash.png"
 }
 
+MAPS = {
+    "Ai.Mi's App": "https://liquipedia.net/commons/images/thumb/1/1f/Omega_Strikers_Map_AiMi_App.jpg/340px-Omega_Strikers_Map_AiMi_App.jpg",
+    "Atlas's Lab": "https://liquipedia.net/commons/images/thumb/0/05/Omega_Strikers_Map_Atlas_Lab.jpg/339px-Omega_Strikers_Map_Atlas_Lab.jpg",
+    "Gates of Obscura": "https://liquipedia.net/commons/images/thumb/a/a3/Omega_Strikers_Map_Gates_of_Obscura_reworked.jpg/320px-Omega_Strikers_Map_Gates_of_Obscura_reworked.jpg",
+    "Inky's Splash Zone": "https://liquipedia.net/commons/images/thumb/e/e2/Omega_Strikers_Map_Inky%27s_Splash_Zone.jpg/315px-Omega_Strikers_Map_Inky%27s_Splash_Zone.jpg",
+    "Night Market": "https://liquipedia.net/commons/images/thumb/f/f4/Omega_Strikers_Map_Night_Market.jpg/339px-Omega_Strikers_Map_Night_Market.jpg",
+    "Taiko Temple": "https://liquipedia.net/commons/images/thumb/1/15/Omega_Strikers_Map_Taiko_Temple.jpg/320px-Omega_Strikers_Map_Taiko_Temple.jpg",
+    "Ahten City": "https://liquipedia.net/commons/images/thumb/d/de/Omega_Strikers_Map_Ahten_City.jpg/339px-Omega_Strikers_Map_Ahten_City.jpg",
+    "Clarion Test Chamber": "https://liquipedia.net/commons/images/thumb/c/c4/Omega_Strikers_Map_Clarion_Test_Chamber.jpg/600px-Omega_Strikers_Map_Clarion_Test_Chamber.jpg",
+    "Demon Dais": "https://liquipedia.net/commons/images/thumb/e/eb/Omega_Strikers_Map_Demon_Dais.jpg/600px-Omega_Strikers_Map_Demon_Dais.jpg",
+    "Oni Village": "https://liquipedia.net/commons/images/thumb/b/b2/Omega_Strikers_Map_Oni_Village.jpg/600px-Omega_Strikers_Map_Oni_Village.jpg"
+}
+
 # Global dictionary to track active drafts per channel
 active_drafts: Dict[int, Set[str]] = {}
 
@@ -348,6 +361,32 @@ async def draftless_roll(interaction: discord.Interaction):
         inline=False
     )
     embed.set_thumbnail(url=image_url)
+    embed.set_footer(text="Made by seall.dev", icon_url="https://seall.dev/logo.png")
+    
+    await interaction.followup.send(embed=embed)
+
+@bot.tree.command(name='randommap', description='Get a random Omega Strikers map', guild=discord.Object(id=GUILD_ID))
+async def randommap(interaction: discord.Interaction):
+    # Get all available maps
+    available_maps = list(MAPS.keys())
+    
+    # Defer the response to prevent timeout
+    await interaction.response.defer()
+    
+    selected_map = random.choice(available_maps)
+    image_url = MAPS[selected_map]
+    
+    embed = discord.Embed(
+        title=f"🗺️ {selected_map}",
+        description="Random map selected!",
+        color=0x00bfff
+    )
+    embed.add_field(
+        name="Available Maps", 
+        value=f"{len(available_maps)} maps in rotation", 
+        inline=False
+    )
+    embed.set_image(url=image_url)
     embed.set_footer(text="Made by seall.dev", icon_url="https://seall.dev/logo.png")
     
     await interaction.followup.send(embed=embed)
