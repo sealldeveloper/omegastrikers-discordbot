@@ -2,7 +2,8 @@ import discord
 import os
 import random
 import asyncio
-from typing import Dict, Set
+import re
+from typing import Dict, Set, List
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -54,6 +55,15 @@ draft_messages: Dict[int, discord.Message] = {}
 # Global dictionary to track banned characters per channel
 banned_characters: Dict[int, Set[str]] = {}
 
+# Global dictionary to store detected codes by channel (current and historical)
+detected_codes: Dict[int, List[str]] = {}
+
+# Global dictionary to track channels waiting for next NeatQueue message after "Teams Finalized"
+awaiting_team_data: Set[int] = set()
+
+# Global dictionary to store team data by channel
+team_data: Dict[int, str] = {}
+
 
 class Bot(discord.Client):
     def __init__(self):
@@ -61,6 +71,7 @@ class Bot(discord.Client):
         intents.message_content = True
         super().__init__(intents=intents)
         self.tree = discord.app_commands.CommandTree(self)
+        self.synced = False
 
 bot = Bot()
 
@@ -133,11 +144,72 @@ async def auto_end_draft(channel_id: int, delay: int = 600):
 @bot.event
 async def on_ready():
     print(f'{bot.user} has connected to Discord!')
-    try:
-        synced = await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
-        print(f'Synced {len(synced)} command(s) to guild {GUILD_ID}')
-    except Exception as e:
-        print(f'Failed to sync commands: {e}')
+    print(f'Attempting to sync commands to guild {GUILD_ID}')
+    if not bot.synced:
+        try:
+            synced = await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
+            print(f'Synced {len(synced)} command(s) to guild {GUILD_ID}')
+            bot.synced = True
+        except Exception as e:
+            print(f'Failed to sync commands: {e}')
+            import traceback
+            traceback.print_exc()
+    print('Bot is ready!')
+
+@bot.event
+async def on_message(message):
+    if message.author == bot.user:
+        return
+    
+    # Check for NeatQueue messages (ID: 857633321064595466)
+    if message.author.id == 857633321064595466:
+        channel_id = message.channel.id
+        
+        # Check if this is the "Teams Finalized" embed
+        if message.embeds:
+            for embed in message.embeds:
+                if embed.title and "Teams Finalized" in embed.title:
+                    awaiting_team_data.add(channel_id)
+                    return
+        
+        # If we're waiting for team data from NeatQueue and this message has content or embeds
+        if channel_id in awaiting_team_data:
+            if message.content:
+                team_data[channel_id] = message.content
+            elif message.embeds:
+                # Store embed content
+                embed_content = ""
+                for embed in message.embeds:
+                    if embed.title:
+                        embed_content += f"**{embed.title}**\n"
+                    if embed.description:
+                        embed_content += f"{embed.description}\n"
+                    for field in embed.fields:
+                        embed_content += f"**{field.name}**\n{field.value}\n"
+                team_data[channel_id] = embed_content
+            
+            awaiting_team_data.remove(channel_id)
+            return
+    
+    # Existing code detection logic
+    if message.channel.name and message.channel.name.startswith('queue'):
+        pattern = r'^[A-Z][a-z]*[A-Z][a-z]*[A-Z][a-z]*$'
+        
+        if re.match(pattern, message.content.strip()):
+            new_code = message.content.strip()
+            channel_id = message.channel.id
+            
+            # Initialize list if channel not seen before
+            if channel_id not in detected_codes:
+                detected_codes[channel_id] = []
+            
+            # Add new code if it's not already in the list (deduplication)
+            if new_code not in detected_codes[channel_id]:
+                detected_codes[channel_id].append(new_code)
+            else:
+                # Move existing code to end (make it current)
+                detected_codes[channel_id].remove(new_code)
+                detected_codes[channel_id].append(new_code)
 
 @bot.tree.command(name='startdraft', description='Start a random draft in this channel', guild=discord.Object(id=GUILD_ID))
 async def startdraft(interaction: discord.Interaction):
@@ -390,6 +462,63 @@ async def randommap(interaction: discord.Interaction):
     embed.set_footer(text="Made by seall.dev", icon_url="https://seall.dev/logo.png")
     
     await interaction.followup.send(embed=embed)
+
+@bot.tree.command(name='code', description='Get the detected code from this channel', guild=discord.Object(id=GUILD_ID))
+async def code(interaction: discord.Interaction):
+    channel_id = interaction.channel.id
+    
+    if channel_id not in detected_codes or not detected_codes[channel_id]:
+        await interaction.response.send_message('❌ No code detected in this channel yet.', ephemeral=True)
+        return
+    
+    codes_list = detected_codes[channel_id]
+    current_code = codes_list[-1]  # Last item is the current code
+    
+    embed = discord.Embed(
+        title="🔑 Current Code",
+        description=f"```\n{current_code}\n```",
+        color=0x00ff00
+    )
+    
+    # Add previous codes if any exist
+    if len(codes_list) > 1:
+        previous_codes = codes_list[:-1]  # All except the last one
+        previous_codes_text = '\n'.join([f"• `{code}`" for code in previous_codes])
+        embed.add_field(
+            name="📝 Previous Codes",
+            value=previous_codes_text,
+            inline=False
+        )
+    
+    # Add warning about false positives
+    embed.add_field(
+        name="⚠️ Note",
+        value="Auto-detected codes may include false positives.",
+        inline=False
+    )
+    
+    embed.set_footer(text="Made by seall.dev", icon_url="https://seall.dev/logo.png")
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+@bot.tree.command(name='teams', description='Get the latest team data from NeatQueue', guild=discord.Object(id=GUILD_ID))
+async def teams(interaction: discord.Interaction):
+    channel_id = interaction.channel.id
+    
+    if channel_id not in team_data:
+        await interaction.response.send_message('❌ No team data available in this channel yet.', ephemeral=True)
+        return
+    
+    teams_content = team_data[channel_id]
+    
+    embed = discord.Embed(
+        title="👥 Team Data",
+        description=teams_content,
+        color=0x0099ff
+    )
+    embed.set_footer(text="Made by seall.dev", icon_url="https://seall.dev/logo.png")
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 def main():
     load_dotenv()
